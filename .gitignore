@@ -1,0 +1,52 @@
+# Dependencies and generated output
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Local databases, test data and temporary files
+.local/
+.cache/
+.tmp/
+tmp/
+*.log
+*.dump
+*.backup
+pgdata/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+.pgpass
+pgpass.conf
+.npmrc
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Additional local artifacts and private credentials
+*.tmp
+*.temp
+*.swp
+*.swo
+*.sql.gz
+dumps/
+backups/
+.ssh/
+.aws/
+.azure/
+id_rsa
+id_ed25519
+*.credentials.json
+.idea/
+.vscode/
