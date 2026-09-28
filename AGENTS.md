@@ -27,7 +27,19 @@ must remain understandable, explainable, and reproducible by the project owner.
 Before making architectural, product, data-model, design-system, or scope
 decisions, read the relevant documentation under `docs/`.
 
-The project documentation is the source of truth.
+The maintained project documentation is authoritative for validated product
+intent, architecture, scope, and decisions.
+
+The Git repository is authoritative for the current implementation state.
+
+Neither silently overrides the other. If documentation and implementation
+diverge:
+
+1. identify the inconsistency;
+2. explain it before implementation;
+3. determine whether the code or the documented decision is stale;
+4. propose the smallest coherent correction;
+5. update the relevant documentation if a validated decision changes.
 
 Important documents may include:
 
@@ -626,22 +638,228 @@ Do not claim success based only on code inspection.
 
 ---
 
-## 20. Working style for Work / coding agents
+## 20. Working style for coding agents
 
-Before acting:
+Coding agents may act in one of three explicit modes:
+
+1. **Implementer**
+2. **Reviewer**
+3. **Architecture consultant**
+
+Do not silently switch roles during a task.
+
+### 20.1 Before acting
+
+Before implementation or review:
 
 1. read `AGENTS.md`;
-2. inspect relevant files under `docs/`;
+2. inspect the relevant documentation under `docs/`;
 3. inspect the current implementation;
-4. identify the smallest task boundary;
-5. preserve already validated decisions.
+4. inspect the current Git branch and working tree;
+5. identify pre-existing changes that were not created by you;
+6. identify the smallest coherent task boundary;
+7. preserve validated decisions.
 
-For substantial work:
+Never discard, overwrite, or rewrite unrelated existing work.
 
-- explain the intended approach before large structural changes;
-- implement incrementally;
-- verify each meaningful stage;
-- keep documentation synchronized with actual decisions.
+If documentation and implementation appear inconsistent, report the
+inconsistency rather than silently choosing one.
 
 When uncertain whether something belongs to V1, default to **not adding it**
 and consult the project specification.
+
+### 20.2 Implementer mode
+
+When acting as the implementer:
+
+- work only within the agreed task boundary;
+- do not expand scope merely because adjacent improvements are convenient;
+- implement incrementally;
+- keep responsibilities explicit;
+- add or update tests that prove the intended behavior;
+- run the relevant verification commands;
+- keep documentation synchronized when a documented behavior or decision changes;
+- clearly report deviations from the requested design.
+
+For substantial changes, explain the intended approach before making large
+structural modifications.
+
+Do not introduce a new architectural decision implicitly.
+
+If an adjacent issue is discovered:
+
+- fix it only if it is required for correctness and remains within scope;
+- report it instead of expanding the task when it is merely convenient;
+- escalate it when it requires a new architectural or product decision.
+
+### 20.3 Reviewer mode
+
+When acting as a reviewer, default to **read-only review**.
+
+Do not modify the reviewed branch unless explicitly asked to move from reviewer
+mode to implementer mode.
+
+Review the change against:
+
+- validated requirements and decisions;
+- actual implementation behavior;
+- database integrity where applicable;
+- tests and what they genuinely prove;
+- scope discipline;
+- maintainability and unnecessary abstraction;
+- security, accessibility, and performance when relevant.
+
+Classify findings as:
+
+- **BLOCKING** — correctness, integrity, security, specification, or migration
+  issue that must be resolved before merge;
+- **IMPORTANT** — material issue that should normally be addressed;
+- **SUGGESTION** — optional improvement;
+- **QUESTION** — ambiguity or trade-off requiring project arbitration.
+
+Do not request changes solely because you prefer another style, abstraction,
+library, framework, or technology.
+
+A passing test suite is evidence, not proof of every claimed property. Inspect
+whether important tests actually verify the behavior their names and reports
+claim.
+
+### 20.4 Architecture consultant mode
+
+For unresolved architectural decisions, an agent may be asked to analyze and
+propose alternatives without implementing them.
+
+In this mode:
+
+- inspect current constraints and validated decisions;
+- identify assumptions;
+- compare concrete trade-offs;
+- identify migration and learning costs;
+- recommend the smallest coherent option;
+- do not modify implementation unless explicitly requested.
+
+Independent proposals from multiple agents may be compared before a decision is
+approved.
+
+### 20.5 Handoff report
+
+After substantial implementation work, provide a concise handoff containing:
+
+- implementation summary;
+- files changed;
+- important technical decisions;
+- tests and verification commands actually executed;
+- known limitations;
+- unresolved questions;
+- documentation or migration changes;
+- recommended next step.
+
+Report only verification that was actually performed.
+
+---
+
+## 21. Git and multi-agent collaboration
+
+Résonances may be developed with multiple coding agents and human contributors.
+
+The purpose of multi-agent collaboration is independent implementation and
+review, not duplicated uncontrolled work.
+
+### 21.1 Sources of truth
+
+Validated project intent, architecture, scope, and decisions are defined by the
+maintained documentation and decision records.
+
+The Git repository represents the current implementation state.
+
+Neither silently overrides the other.
+
+If implementation and validated documentation diverge, identify the divergence
+and resolve it through project arbitration before treating the discrepancy as a
+new decision.
+
+### 21.2 Branch discipline
+
+For substantial work:
+
+- do not use `main` as a shared scratch branch;
+- use a dedicated task branch;
+- keep a branch focused on one primary objective;
+- avoid unrelated refactors;
+- do not rewrite shared history unless explicitly authorized.
+
+Before changing files, inspect the current branch and working tree.
+
+Do not discard or overwrite pre-existing changes created by another contributor.
+
+### 21.3 Concurrent work
+
+Two coding agents should not independently edit overlapping parts of the same
+task unless parallel work has been explicitly planned.
+
+Parallel implementation is appropriate only when task boundaries are genuinely
+independent.
+
+When overlap is unavoidable, coordinate through explicit branches, task
+ownership, and review rather than competing edits.
+
+### 21.4 Implementer and reviewer rotation
+
+Work, Claude Code, or other coding agents may alternate roles between tasks.
+
+A typical workflow is:
+
+```text
+Project framing and acceptance criteria
+    ↓
+Implementer
+    ↓
+task branch
+    ↓
+tests and verification
+    ↓
+independent reviewer
+    ↓
+project arbitration
+    ↓
+corrections if required
+    ↓
+final verification
+    ↓
+merge
+```
+
+The same agent should not be treated as the sole authority for both its
+implementation and its validation.
+
+For significant changes, prefer independent review when practical.
+
+### 21.5 Disagreements and arbitration
+
+Agent recommendations are not project decisions by themselves.
+
+Never justify a change only because another agent recommended it.
+
+When agents disagree:
+
+1. identify the exact technical disagreement;
+2. compare both positions against validated documentation;
+3. inspect concrete code, SQL, tests, or runtime evidence;
+4. distinguish correctness issues from preferences;
+5. escalate unresolved architectural trade-offs for project arbitration.
+
+Do not silently resolve a genuine product or architectural disagreement by
+modifying the code.
+
+### 21.6 Merge discipline
+
+Before merge:
+
+- blocking review findings must be resolved or explicitly accepted;
+- relevant tests and checks must pass;
+- migration changes must be inspected when applicable;
+- documentation must match any newly approved behavior or decision;
+- unrelated working-tree changes must not be included accidentally.
+
+A merge is the integration of an approved change, not the moment at which the
+architecture is decided.
