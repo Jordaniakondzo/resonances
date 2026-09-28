@@ -13,14 +13,18 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "tsx scripts/migrate.ts",
-    "format:check": "prettier --check \"db/*.ts\" tests scripts drizzle.config.ts tsconfig.json package.json",
-    "db:verify": "tsx scripts/verify-schema.ts"
+    "format:check": "prettier --check \"db/*.ts\" \"src/**/*.ts\" tests scripts drizzle.config.ts tsconfig.json package.json",
+    "db:verify": "tsx scripts/verify-schema.ts",
+    "test:editorial": "tsx --test tests/editorial.test.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
-    "pg": "8.23.0"
+    "mdast-util-from-markdown": "2.0.3",
+    "pg": "8.23.0",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@types/mdast": "4.0.4",
     "@types/node": "26.6.3",
     "@types/pg": "8.23.1",
     "drizzle-kit": "0.31.11",

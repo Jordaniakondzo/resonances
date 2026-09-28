@@ -341,3 +341,105 @@ test("applying the migration twice preserves existing data", async () => {
     await client.query("DELETE FROM reflections WHERE id=$1", [row.id]);
   }
 });
+
+test("editorial references resolve exact locale and deduplicated themes without writes", () =>
+  transaction(async () => {
+    const { parseContent } = await import("../src/editorial/parse.js");
+    const { resolveReferences } = await import("../src/editorial/resolve.js");
+    const { editorialReferences } =
+      await import("../src/repositories/editorial-references.js");
+    const contentId = randomUUID();
+    const mediaId = randomUUID();
+    const themeId = randomUUID();
+    await client.query(
+      "INSERT INTO themes(id,locale,slug,name) VALUES ($1,'fr','presence','Présence'),($2,'en','presence','Presence')",
+      [themeId, randomUUID()],
+    );
+    await client.query(
+      "INSERT INTO media_assets(id,original_url) VALUES ($1,'test.jpg')",
+      [mediaId],
+    );
+    const file = "content/publications/example.md";
+    const parsed = parseContent(
+      `---\ntype: publication\nid: ${contentId}\nlocale: fr\nstatus: draft\nthemes: [presence, presence]\nmedia: {id: ${mediaId}}\n---\n`,
+      file,
+    );
+    // PostgreSQL itself rejects writes during the resolver call.
+    await client.query("COMMIT");
+    try {
+      await client.query("BEGIN READ ONLY");
+      const result = await resolveReferences(
+        parsed,
+        editorialReferences(drizzle(client)),
+        file,
+      );
+      assert.deepEqual(result.themeIds, [themeId]);
+      assert.equal(result.content.id, contentId);
+      assert.equal(
+        (
+          await client.query(
+            "SELECT count(*)::int AS n FROM publications WHERE id=$1",
+            [contentId],
+          )
+        ).rows[0].n,
+        0,
+      );
+      await assert.rejects(
+        resolveReferences(
+          { ...parsed, locale: "de" },
+          editorialReferences(drizzle(client)),
+          file,
+        ),
+        /themes/,
+      );
+      await assert.rejects(
+        resolveReferences(
+          { ...parsed, themeSlugs: ["inexistant"] },
+          editorialReferences(drizzle(client)),
+          file,
+        ),
+        /themes/,
+      );
+      assert.equal(parsed.type, "publication");
+      if (parsed.type === "publication")
+        await assert.rejects(
+          resolveReferences(
+            { ...parsed, mediaAssetId: randomUUID() },
+            editorialReferences(drizzle(client)),
+            file,
+          ),
+          /media/,
+        );
+    } finally {
+      await client.query("ROLLBACK");
+      await client.query("DELETE FROM themes WHERE slug='presence'");
+      await client.query("DELETE FROM media_assets WHERE id=$1", [mediaId]);
+      await client.query("BEGIN");
+    }
+  }));
+
+test("editorial resolver validates optional reflection cover and allows reference-free draft", () =>
+  transaction(async () => {
+    const { parseContent } = await import("../src/editorial/parse.js");
+    const { resolveReferences } = await import("../src/editorial/resolve.js");
+    const { editorialReferences } =
+      await import("../src/repositories/editorial-references.js");
+    const file = "content/reflections/example.md";
+    const input = `---\ntype: reflection\nid: ${randomUUID()}\nlocale: fr\nstatus: draft\n---\n`;
+    const parsed = parseContent(input, file);
+    const result = await resolveReferences(
+      parsed,
+      editorialReferences(drizzle(client)),
+      file,
+    );
+    assert.deepEqual(result.themeIds, []);
+    if (parsed.type !== "reflection") throw new Error("Wrong type");
+    await assert.rejects(
+      resolveReferences(
+        { ...parsed, coverMediaId: randomUUID() },
+        editorialReferences(drizzle(client)),
+        file,
+      ),
+      /cover_media/,
+    );
+  }));

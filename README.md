@@ -49,7 +49,7 @@ Page / UI → Service / Use Case → Repository → Drizzle → PostgreSQL
 
 Les médias seront stockés hors PostgreSQL, dans un stockage objet ; la base conserve leurs métadonnées et références.
 
-Le circuit éditorial retenu repose sur des fichiers **Markdown structurés avec frontmatter**, versionnés dans Git, puis un import privé vers PostgreSQL : validation, dry-run, transaction et idempotence. Ce workflow reste à implémenter.
+Le circuit éditorial retenu repose sur des fichiers **Markdown structurés avec frontmatter**, versionnés dans Git, puis un import privé vers PostgreSQL : validation, dry-run, transaction et idempotence. Le contrat, la validation et la résolution des références sont implémentés ; le dry-run et l’import transactionnel restent à réaliser.
 
 ## Stack technique retenue
 
@@ -67,11 +67,12 @@ L’hébergement et le pipeline média définitif restent ouverts. Actuellement,
 - ✅ Premier socle PostgreSQL/Drizzle : médias, thèmes, publications, réflexions et associations de thèmes.
 - ✅ Migration SQL initiale numérotée, journal et snapshot Drizzle.
 - ✅ Tests d’intégrité et de visibilité sur PostgreSQL réel.
-- ⬜ Contrats Markdown/frontmatter, validation éditoriale et import privé.
+- ✅ Contrats Markdown/frontmatter, validation éditoriale et résolution des références.
+- ⬜ Dry-run et import privé transactionnel/idempotent.
 - ⬜ Intégration Next.js et implémentation du design system déjà défini.
 - ⬜ Première tranche verticale complète, de l’import à la lecture publique.
 
-Le [compte rendu du socle](docs/RESONANCES-V1-DATA-CORE.md) documente **18 tests réussis sur PostgreSQL 18.6** lors de sa validation. Aucune page du site n’est encore implémentée. Les migrations sont prêtes à être suivies dans Git ; le dossier local n’a pas encore été initialisé comme dépôt Git.
+Le [compte rendu du socle](docs/RESONANCES-V1-DATA-CORE.md) documente **18 tests réussis sur PostgreSQL 18.6** lors de sa validation. Aucune page du site n’est encore implémentée. Les migrations sont versionnées dans Git.
 
 ## Structure du dépôt
 
@@ -79,7 +80,9 @@ Le [compte rendu du socle](docs/RESONANCES-V1-DATA-CORE.md) documente **18 tests
 docs/                 Spécification, décisions et guides techniques
 db/                   Schéma Drizzle, visibilité et migrations SQL
 scripts/              Application et vérification des migrations
-tests/                Tests d’intégration PostgreSQL
+tests/                Tests éditoriaux et intégration PostgreSQL
+src/                  Parsing éditorial et lectures de références
+content/              Exemples Markdown synthétiques
 sources/              Documents de référence — lecture seule
 AGENTS.md             Consignes de travail sur le projet
 drizzle.config.ts     Configuration Drizzle Kit
@@ -88,7 +91,7 @@ package-lock.json     Versions verrouillées
 .env.example          Exemples de variables d’environnement
 ```
 
-**Ne pas modifier les fichiers de `sources/`.** Les dossiers `src/` pour l’application et `content/` pour les sources éditoriales sont prévus, mais n’existent pas encore.
+**Ne pas modifier les fichiers de `sources/`.** `src/` contient le premier module éditorial ; `content/` contient des exemples synthétiques. Le dépôt étant public, un fichier `draft` versionné ici reste visible sur GitHub : conserver les vrais brouillons confidentiels dans des sources Git privées.
 
 ## Développement local
 
@@ -107,6 +110,7 @@ npm run typecheck
 npm run format:check
 npm run db:check
 npm run db:verify
+npm run test:editorial
 ```
 
 `build` compile le **socle TypeScript**, pas une application Next.js. Aucune commande de lancement du site n’est encore disponible.
@@ -129,6 +133,8 @@ Seule la base temporaire créée par les tests est supprimée ; aucune base util
 `db:check` contrôle les métadonnées de migrations. `db:verify` compare la migration initiale à une génération indépendante du schéma Drizzle ; ce contrôle est actuellement limité à cette première migration.
 
 ## Documentation
+
+Le [contrat éditorial](docs/RESONANCES-V1-EDITORIAL-CONTRACT.md) détaille la syntaxe, les validations, les limites et les tests sans base.
 
 Le README présente le projet ; les documents de référence détaillés restent dans `docs/` :
 
