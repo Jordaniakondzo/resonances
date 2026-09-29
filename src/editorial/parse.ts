@@ -34,6 +34,10 @@ function hasEditorialContent(node: Root | RootContent): boolean {
   }
 }
 
+function trimSectionBoundaryLines(value: string): string {
+  return value.replace(/^(?:[ \t]*\n)+/, "").replace(/(?:\n[ \t]*)+$/, "");
+}
+
 export function parseContent(input: string, file: string): ParsedContent {
   const fail = (field: string, message: string): never => {
     throw new ContentValidationError(file, field, message);
@@ -245,6 +249,20 @@ export function parseContent(input: string, file: string): ParsedContent {
   const mediaAssetId = mediaId(data.media, "media", published);
   const values: (string | null)[] = [null, null, null, null];
   let previous = -1;
+  const rejectNestedStructuralHeading = (
+    node: RootContent,
+    topLevel: boolean,
+  ): void => {
+    if (node.type === "heading" && node.depth <= 2 && !topLevel)
+      fail(
+        "section",
+        "Les headings H1 et H2 imbriqués sont interdits dans une Publication.",
+      );
+    if ("children" in node)
+      for (const child of node.children)
+        rejectNestedStructuralHeading(child as RootContent, false);
+  };
+  for (const node of tree.children) rejectNestedStructuralHeading(node, true);
   const headings = tree.children.filter(
     (node) => node.type === "heading" && node.depth <= 2,
   );
@@ -268,14 +286,17 @@ export function parseContent(input: string, file: string): ParsedContent {
     previous = index;
     const end = headings[i + 1]?.position?.start.offset ?? body.length;
     const start = heading.position!.end.offset!;
-    values[index] = body.slice(start, end).trim() || null;
+    const value = trimSectionBoundaryLines(body.slice(start, end));
+    const valueTree = fromMarkdown(value);
+    validateNode(valueTree);
+    if (published && !hasEditorialContent(valueTree))
+      fail(label, "Section sans contenu éditorial.");
+    values[index] = value || null;
     // A section is stored independently, so reference definitions must stay local.
     const nodes = tree.children.filter(
       (n) =>
         n.position!.start.offset! >= start && n.position!.start.offset! < end,
     );
-    if (published && !nodes.some(hasEditorialContent))
-      fail(label, "Section sans contenu éditorial.");
     const definitions = new Set(
       nodes.filter((n) => n.type === "definition").map((n) => n.identifier),
     );

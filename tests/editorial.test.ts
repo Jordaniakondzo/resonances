@@ -1,12 +1,28 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import type { Root, RootContent } from "mdast";
 import { parseContent } from "../src/editorial/parse.js";
+import { ContentValidationError } from "../src/editorial/types.js";
 
 const id = "8e8e0be8-49a4-4dbc-9a39-35d475f06a82";
 const media = "683b7c85-bf50-4cb6-909f-ce96ef39d79d";
 const path = "content/publications/example.md";
 function document(type = "publication", extra = "", body = "") {
   return `---\ntype: ${type}\nid: ${id}\nlocale: fr\nstatus: draft\n${extra}\n---\n${body}`;
+}
+function hasNodeType(
+  node: Root | RootContent,
+  types: ReadonlySet<RootContent["type"]>,
+): boolean {
+  if (node.type !== "root" && types.has(node.type)) return true;
+  return (
+    "children" in node &&
+    node.children.some((child) => hasNodeType(child as RootContent, types))
+  );
+}
+function isFieldError(error: unknown, field: string): boolean {
+  return error instanceof ContentValidationError && error.field === field;
 }
 const body =
   "## Observation\n\nUne table.\n\n## Évocation\n\nUne **distance** possible.\n\n## Réflexion\n\n### Nuance\n\nUn lien.\n\n## Question ouverte\n\nQue reste-t-il ?";
@@ -174,7 +190,7 @@ test("published reflection requires content and excerpt", () => {
   ).replace("status: draft", "status: published");
   assert.throws(
     () => parseContent(input, "content/reflections/a.md"),
-    /content/,
+    (error: unknown) => isFieldError(error, "content"),
   );
   assert.throws(
     () =>
@@ -320,10 +336,111 @@ for (const [label, content] of [
   test(`published reflection rejects only ${label}`, () => {
     assert.throws(
       () => parseContent(publishedReflection(content!), reflectionPath),
-      /content/,
+      (error: unknown) => isFieldError(error, "content"),
     );
   });
 }
+
+for (const [label, content] of [
+  ["list H1", "- # Titre interdit"],
+  ["blockquote H2", "> ## Sous-section interdite"],
+]) {
+  test(`published publication rejects nested ${label} as a section error`, () => {
+    assert.throws(
+      () => parseContent(published.replace("Une table.", content!), path),
+      (error: unknown) => isFieldError(error, "section"),
+    );
+  });
+}
+
+for (const [label, content] of [
+  ["four-space indented HTML", "    <script>alert(1)</script>"],
+  [
+    "four-space indented unsafe definition",
+    "    [x]: javascript:alert(1)\n\n[cliquer][x]",
+  ],
+  [
+    "four-space indented Markdown image",
+    "    ![x](https://tracker.example/p.gif)",
+  ],
+  ["tab-indented HTML", "\t<script>alert(1)</script>"],
+]) {
+  test(`stored section preserves inert semantics for ${label}`, () => {
+    const result = parseContent(
+      published.replace("Une table.", content!),
+      path,
+    );
+    assert.equal(result.type, "publication");
+    if (result.type !== "publication") throw new Error("Wrong type");
+    assert.equal(result.observation, content);
+    const storedTree = fromMarkdown(result.observation);
+    assert.equal(
+      hasNodeType(
+        storedTree,
+        new Set([
+          "html",
+          "image",
+          "imageReference",
+          "definition",
+          "link",
+          "linkReference",
+        ]),
+      ),
+      false,
+    );
+    assert.equal(storedTree.children[0]?.type, "code");
+  });
+}
+
+for (const [label, input] of [
+  [
+    "HTML in title",
+    published.replace("title: Un lien", 'title: "<b>Un lien</b>"'),
+  ],
+  [
+    "HTML in hook",
+    published.replace("hook: Une présence", 'hook: "<i>Une présence</i>"'),
+  ],
+  [
+    "HTML in excerpt",
+    publishedReflection("Texte.").replace(
+      "excerpt: E",
+      'excerpt: "<em>E</em>"',
+    ),
+  ],
+  [
+    "protocol-relative URL",
+    published.replace("Une table.", "[x](//evil.example/x)"),
+  ],
+  ["relative URL", published.replace("Une table.", "[x](relative/path)")],
+  [
+    "backslash in URL",
+    published.replace("Une table.", "[x](https://evil.example\\path)"),
+  ],
+  [
+    "image reference",
+    published.replace(
+      "Une table.",
+      "![x][tracker]\n\n[tracker]: https://tracker.example/p.gif",
+    ),
+  ],
+]) {
+  test(`rejects ${label}`, () => {
+    const inputPath = label === "HTML in excerpt" ? reflectionPath : path;
+    assert.throws(
+      () => parseContent(input!, inputPath),
+      (error: unknown) => error instanceof ContentValidationError,
+    );
+  });
+}
+
+test("allows mailto and anchor links in independently stored sections", () => {
+  const content = "[courriel](mailto:test@example.org) et [ancre](#suite)";
+  const result = parseContent(published.replace("Une table.", content), path);
+  assert.equal(result.type, "publication");
+  if (result.type !== "publication") throw new Error("Wrong type");
+  assert.equal(result.observation, content);
+});
 
 for (const [label, content] of [
   ["heading and prose", "### Nuance\n\nUne présence."],

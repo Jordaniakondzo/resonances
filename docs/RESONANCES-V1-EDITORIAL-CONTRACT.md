@@ -1,6 +1,6 @@
 # Résonances V1 — Contrat Markdown et validation
 
-Version 1.0 — 28 septembre 2026.
+Version 1.1 — 29 septembre 2026.
 
 Autorité : [D03](RESONANCES-V1-L0-DECISIONS.md#d03--circuit-éditorial), [spécification](RESONANCES-V1-SPECIFICATION.md), [Data Core](RESONANCES-V1-DATA-CORE.md). D01–D06 restent validées ; D07/D08 restent ouvertes. Aucune migration ni refonte du Data Core.
 
@@ -134,25 +134,19 @@ Les tests couvrent les drafts, exigences de publication, erreurs YAML, dates imp
 
 Sources : [YAML](https://eemeli.org/yaml/) et [mdast-util-from-markdown](https://github.com/syntax-tree/mdast-util-from-markdown), consultées le 28 septembre 2026.
 
-## Résultats de cette étape
+## Registre de vérification courant
 
-Vérifications du 28 septembre 2026 :
+Vérifications du 29 septembre 2026, relancées sur l’état courant après la correction de l’extraction des sections Markdown :
 
-| Commande                    | Résultat                                                                            |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| npm run build               | Réussi, socle TypeScript                                                            |
-| npm run typecheck           | Réussi                                                                              |
-| npm run format:check        | Réussi                                                                              |
-| npm run db:check            | Réussi                                                                              |
-| npm run db:verify           | Migration initiale identique à une génération indépendante                          |
-| npm test                    | 64 tests réussis : 44 éditoriaux, 18 Data Core, 2 parcours de résolution PostgreSQL |
-| npm audit --omit=dev --json | 0 vulnérabilité signalée                                                            |
-| npm audit --json            | 4 alertes modérées préexistantes dans la chaîne Drizzle Kit/esbuild                 |
+| Commande               | Résultat                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| npm run test:editorial | 76 tests éditoriaux réussis                                                         |
+| npm run typecheck      | Réussi                                                                              |
+| npm run format:check   | Réussi                                                                              |
+| npm test               | 96 tests réussis : 76 éditoriaux, 18 Data Core, 2 parcours de résolution PostgreSQL |
+| npm run db:check       | Réussi                                                                              |
+| npm run db:verify      | Migration initiale identique à une génération indépendante                          |
 
-Dépendances ajoutées avec versions exactes : `npm install --save-exact yaml@2.9.1 mdast-util-from-markdown@2.0.3` et `npm install --save-dev --save-exact @types/mdast@4.0.4`. Les types mdast sont déclarés directement parce que le code les importe. Aucun framework de validation supplémentaire.
+`npm test` a utilisé l’instance PostgreSQL 18 dédiée sous `.local/postgres-tests`, liée à `127.0.0.1:55439`, avec `TEST_DATABASE_URL` et le rôle local `resonances_test`. Chaque exécution a créé puis supprimé sa base temporaire. L’instance a été arrêtée après vérification.
 
-Tests ciblés exécutés : `node --import tsx --test tests/editorial.test.ts`, puis `npm run test:editorial` ; résolution : `node --import tsx --test --test-name-pattern=editorial tests/schema.test.ts`. Les 35 premiers tests ont échoué face au point d’entrée vide avant implémentation ; les deux tests de résolution ont ensuite échoué sur le résolveur vide. Un test supplémentaire a révélé qu’une section ne contenant qu’un séparateur était acceptée ; le contrôle a été corrigé, puis toute la suite relancée.
-
-L’instance PostgreSQL isolée existante a été démarrée avec `pg_ctl -D .local/postgres-tests -l .local/postgres-tests.log -o "-h 127.0.0.1 -p 55439" start`. Le premier démarrage sans ces options n’avait pas pu ouvrir le port par défaut ; les tests avaient alors échoué en connexion, avant d’être relancés correctement. Les tests utilisent `TEST_DATABASE_URL` vers cette instance et créent leur propre base temporaire ; ils ne modifient aucune base utilisateur. L’instance est arrêtée après vérification.
-
-Prettier a été exécuté sur les fichiers TypeScript nouveaux/modifiés, package.json, tsconfig.json, README, le présent contrat et les exemples. Le schéma, la visibilité et les migrations existantes n’ont aucun diff. Aucun commit ni push effectué pendant cette étape.
+Les régressions ajoutées couvrent la conservation de l’indentation Markdown significative lors de l’extraction, le reparsage et la revalidation de la valeur destinée au stockage, les H1/H2 imbriqués interdits dans une Publication, les erreurs structurées du champ `content`, ainsi que les cas HTML, URL et images Markdown ciblés. Ce registre ne constitue pas une preuve de l’import, du dry-run complet, du renderer ou de l’idempotence, qui ne sont pas implémentés ici.
