@@ -421,7 +421,7 @@ for (const [label, input] of [
     "image reference",
     published.replace(
       "Une table.",
-      "![x][tracker]\n\n[tracker]: https://tracker.example/p.gif",
+      "Texte substantif.\n\n![x][tracker]\n\n[tracker]: https://tracker.example/p.gif",
     ),
   ],
 ]) {
@@ -429,7 +429,7 @@ for (const [label, input] of [
     const inputPath = label === "HTML in excerpt" ? reflectionPath : path;
     assert.throws(
       () => parseContent(input!, inputPath),
-      (error: unknown) => error instanceof ContentValidationError,
+      (error: unknown) => isFieldError(error, "Markdown"),
     );
   });
 }
