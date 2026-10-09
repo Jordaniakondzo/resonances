@@ -13,6 +13,9 @@ Le dépôt applicatif est public : `status: draft` protège la visibilité futur
 ## Choix et alternatives
 
 - UUID stable : identité technique, conservée lors des changements de titre, slug et chemin. Le futur upsert cible l’UUID dans la table indiquée par `type`. Un changement de type sera une opération explicite, jamais une conversion silencieuse.
+
+  Dans D03 V1, le couple `(locale, slug)` est immuable après le premier import d'un UUID, quel que soit le statut. Un brouillon importé sans slug ne peut donc pas être publié ultérieurement sous le même UUID dans ce circuit. Tout contenu destiné à une publication future doit recevoir son slug définitif avant son premier import. Voir [D03-SLUG-01](RESONANCES-V1-D03-IMPORT-DESIGN.md#7-politique-de-slug-et-transitions).
+
 - Thèmes par slug : écriture lisible, résolution exacte par `(locale, slug)`, sans création automatique ni fallback de langue. Un renommage de thème exige la mise à jour des sources. Les UUID seraient plus stables lors des renommages, mais moins pratiques à éditer. Cette règle de ce circuit n’ajoute pas une contrainte SQL globale interdisant toute association multilingue.
 - `excerpt` obligatoire en publication : garantit les aperçus et le corpus D01. L’alternative d’extraire le début du corps a été écartée pour éviter une sélection implicite.
 - Clés inconnues et doublons YAML rejetés : les fautes sont signalées plutôt qu’ignorées.
