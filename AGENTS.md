@@ -756,6 +756,24 @@ After substantial implementation work, provide a concise handoff containing:
 
 Report only verification that was actually performed.
 
+## 20.6 Subagent delegation and internal quality cycles
+
+An implementer may coordinate specialized subagents when delegation materially improves correctness, verification, or execution efficiency.
+
+Subagents may perform repository exploration, implementation of independent components, testing, review, and documentation within the approved task scope.
+
+Rules:
+
+- Use the minimum number of subagents justified by the task.
+- Assign clear responsibilities, file ownership, and permitted actions.
+- Avoid concurrent edits to overlapping files.
+- Allow internal implementation → testing → review → correction cycles without repeated owner approval, provided they remain within the approved scope.
+- Do not treat a review performed by a subagent under the same implementer orchestration as fully independent external review.
+- Escalate architectural changes, material security concerns, irreversible operations, and unresolved conflicts.
+- Report the relevant verification evidence and remaining limitations in one consolidated handoff.
+
+Subagent delegation does not expand the implementer's authorization or override project decisions.
+
 ---
 
 ## 21. Git and multi-agent collaboration
@@ -863,3 +881,45 @@ Before merge:
 
 A merge is the integration of an approved change, not the moment at which the
 architecture is decided.
+
+## 21.7 Risk-based review policy
+
+Choose review depth according to the actual risk, not merely the number of changed files.
+
+**LIGHT — Low-risk, reversible changes**
+
+Examples: editorial copy, minor styling, localized UI improvements.
+
+Expected verification: focused checks and implementer self-review. Independent external review is optional.
+
+**STANDARD — Moderate-risk changes**
+
+Examples: ordinary repositories, application services, domain components, and localized business logic.
+
+Expected verification: relevant automated tests and an internal review, preferably using a separate subagent when useful.
+
+**CRITICAL — High-risk changes**
+
+Examples: database migrations, transactional imports, SQL permissions, privileged functions, security boundaries, concurrency protocols, destructive operations, and changes affecting data integrity or public visibility.
+
+Expected verification: relevant integration tests and independent external review, typically by a different agent or environment.
+
+The project owner may require stronger review for any task.
+
+Review depth may increase when evidence reveals greater risk. Do not reduce mandatory verification simply to shorten a workflow.
+
+## 21.8 Git authorization and commit metadata
+
+Implementation approval does not automatically authorize a commit, merge, push, rebase, history rewrite, branch deletion, or worktree removal.
+
+Require explicit authorization for each Git operation that changes shared history, publishes changes, or alters the approved integration state. Local commits also require authorization unless expressly included in the task mandate.
+
+Before an authorized operation, verify the current branch, working tree, affected files, and relevant references. Preserve unrelated local changes and other worktrees.
+
+Commit messages must describe the actual change and must not include unnecessary automatically generated AI-attribution trailers or promotional signatures, including `Co-Authored-By`, `Generated-By`, or equivalents.
+
+Preserve authentic Git Author and Committer metadata. Do not falsify authorship or bypass applicable disclosure requirements.
+
+Never bypass Git security controls or use force-push without separate explicit authorization.
+
+A successful local commit does not constitute authorization to merge or push.
