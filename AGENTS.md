@@ -756,7 +756,7 @@ After substantial implementation work, provide a concise handoff containing:
 
 Report only verification that was actually performed.
 
-## 20.6 Subagent delegation and internal quality cycles
+### 20.6 Subagent delegation and internal quality cycles
 
 An implementer may coordinate specialized subagents when delegation materially improves correctness, verification, or execution efficiency.
 
@@ -882,7 +882,7 @@ Before merge:
 A merge is the integration of an approved change, not the moment at which the
 architecture is decided.
 
-## 21.7 Risk-based review policy
+### 21.7 Risk-based review policy
 
 Choose review depth according to the actual risk, not merely the number of changed files.
 
@@ -908,7 +908,7 @@ The project owner may require stronger review for any task.
 
 Review depth may increase when evidence reveals greater risk. Do not reduce mandatory verification simply to shorten a workflow.
 
-## 21.8 Git authorization and commit metadata
+### 21.8 Git authorization and commit metadata
 
 Implementation approval does not automatically authorize a commit, merge, push, rebase, history rewrite, branch deletion, or worktree removal.
 
