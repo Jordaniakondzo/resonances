@@ -1,8 +1,15 @@
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { ReferenceReader } from "../editorial/resolve.js";
 import { and, eq } from "drizzle-orm";
 import { themes, mediaAssets } from "../../db/schema.js";
-export function editorialReferences(db: NodePgDatabase): ReferenceReader {
+
+// A Drizzle context already bound to the caller's connection or transaction.
+// Both `NodePgDatabase` and the `tx` given by `db.transaction()` extend
+// `PgDatabase`, so readers accept either without opening a transaction.
+export type EditorialDb = PgDatabase<NodePgQueryResultHKT>;
+
+export function editorialReferences(db: EditorialDb): ReferenceReader {
   return {
     async findTheme(locale, slug) {
       // SELECT id FROM themes WHERE locale = $1 AND slug = $2 LIMIT 1.
