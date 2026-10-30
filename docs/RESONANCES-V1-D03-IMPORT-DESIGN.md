@@ -107,7 +107,8 @@ type ConflictCode =
   | "IMMUTABLE_EDITORIAL_KEY"
   | "SLUG_COLLISION"
   | "MISSING_REFERENCE"
-  | "MEDIA_NOT_READY";
+  | "MEDIA_NOT_READY"
+  | "UNSUPPORTED_STORED_DATE";
 
 interface ConflictDiagnostic {
   category: "CONFLICT";
@@ -208,7 +209,7 @@ CASE WHEN p.published_at IS NULL THEN NULL
 END AS published_at_us
 ```
 
-La requête utilise l'alias de la table correspondante. Le format et ses limites de plage de dates doivent être vérifiés sur PostgreSQL réel. Une date hors plage représentable par le contrat source JavaScript est un diagnostic explicite, pas un NOOP. Ne jamais convertir un entier de microsecondes depuis l'époque en `number` JavaScript : sa valeur courante dépasse l'entier sûr. Une comparaison SQL exacte `published_at IS NOT DISTINCT FROM $n::timestamptz` peut compléter le test, mais le snapshot affiché dans le diff doit conserver la précision.
+La requête utilise l'alias de la table correspondante. Le format et ses limites de plage de dates doivent être vérifiés sur PostgreSQL réel. Une date hors plage représentable par le contrat source JavaScript est un diagnostic explicite, pas un NOOP. **VALIDATED — D03-03 :** une date **source** dont l’instant UTC sort des années 0001 à 9999 (par exemple `0001-01-01T00:00:00+01:00`) est un `PARSE_ERROR / INVALID_DOCUMENT` sur le champ `published_at` ; une date **stockée** hors plage (avant l’an 1, après l’9999, `infinity`) produit le conflit `UNSUPPORTED_STORED_DATE` sur les documents portant cet UUID, sans empêcher le plan des autres fichiers. Un UUID présent dans `publications` **et** `reflections` produit `TYPE_CHANGE` avec un message d’incohérence intertype ; aucune des deux lignes n’est choisie. Ne jamais convertir un entier de microsecondes depuis l'époque en `number` JavaScript : sa valeur courante dépasse l'entier sûr. Une comparaison SQL exacte `published_at IS NOT DISTINCT FROM $n::timestamptz` peut compléter le test, mais le snapshot affiché dans le diff doit conserver la précision.
 
 **VALIDATED — Clé éditoriale immuable.** Avant tout diff d'UPDATE, comparer séparément `locale` et `slug` du snapshot source et de la ligne de même UUID. Toute différence, y compris `null` vers une valeur ou l'inverse, produit `IMMUTABLE_EDITORIAL_KEY`, quel que soit `status`. Un UUID trouvé dans l'autre table produit `TYPE_CHANGE` ; il ne devient jamais une création dans la nouvelle table. Cette politique protège les UUID déjà présents à partir de l'adoption du circuit D03, sans prouver l'historique des URL antérieures.
 

@@ -43,7 +43,8 @@ export type ConflictCode =
   | "IMMUTABLE_EDITORIAL_KEY"
   | "SLUG_COLLISION"
   | "MISSING_REFERENCE"
-  | "MEDIA_NOT_READY";
+  | "MEDIA_NOT_READY"
+  | "UNSUPPORTED_STORED_DATE";
 
 export interface ConflictDiagnostic {
   category: "CONFLICT";
