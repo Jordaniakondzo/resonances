@@ -9,6 +9,12 @@ Résonances est un projet de plateforme éditoriale et visuelle francophone auto
 
 Le projet explore ce qui nourrit les liens, mais aussi leurs dimensions fragiles, ambiguës ou difficiles. Il commence par l’amour romantique, avec une ouverture progressive vers d’autres formes de relations. La V1 est un site éditorial d’auteur, sans fonctionnalités de réseau social.
 
+### Direction artistique
+
+Les premières explorations visuelles de Résonances sont conservées dans le [dossier design](docs/design/README.md).
+
+Ce dossier présente le moodboard éditorial et une maquette historique de la Galerie V1. Ces références illustrent les intentions artistiques du projet ; elles sont indicatives et non contractuelles, et ne remplacent pas les spécifications et décisions validées.
+
 ## Vision éditoriale
 
 **Voir → Ressentir → Comprendre → Questionner**
