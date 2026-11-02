@@ -6,7 +6,7 @@ Autorité : [D03](RESONANCES-V1-L0-DECISIONS.md#d03--circuit-éditorial), [spéc
 
 ## Portée réalisée
 
-Parsing pur, validation éditoriale, normalisation et résolution de références existantes en lecture seule. Aucun import, upsert, plan de mutations, rendu HTML, page publique ou dry-run complet n’est implémenté.
+Parsing pur, validation éditoriale, normalisation et résolution de références existantes en lecture seule. Complété depuis par D03-01 à D03-04 (snapshots, plan d’import, chargeur de sources et dry-run en lecture seule : voir le [contrat D03](RESONANCES-V1-D03-IMPORT-DESIGN.md#10-contrat-du-dry-run-à-zéro-écriture)). Aucun import, upsert, rendu HTML ou page publique n’est implémenté.
 
 Le dépôt applicatif est public : `status: draft` protège la visibilité future dans l’application, **pas la confidentialité du fichier sur GitHub**. Les exemples de `content/` sont synthétiques et publicisables. Les brouillons confidentiels et traces privées de provenance devront rester dans des sources Git privées ; le futur import pourra lire ces fichiers séparément. D03 impose Git, pas un dépôt public pour les contenus confidentiels.
 
