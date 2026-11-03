@@ -74,7 +74,7 @@ const EXPECTED_SQLSTATE_CLASSES = new Set(["08", "40", "53", "57", "58"]);
 // hit it when a lock_timeout is configured and a DDL holds an exclusive lock.
 // 55000, 55006 (object in use), 55P02, 55P04 are rethrown.
 const EXPECTED_SQLSTATES = new Set(["55P03"]);
-const CONNECTION_ERRNO = new Set([
+export const CONNECTION_ERRNO = new Set([
   "ECONNREFUSED",
   "ECONNRESET",
   "ETIMEDOUT",
@@ -86,7 +86,7 @@ const CONNECTION_ERRNO = new Set([
 // code; these are their exact message openings (pg 8.23 client.js, pg-pool).
 // Anchored and case-sensitive, so a message that merely contains the words
 // (editorial content echoed by another error) is not taken for a connection loss.
-const CONNECTION_MESSAGE =
+export const CONNECTION_MESSAGE =
   /^(?:Connection terminated|timeout exceeded when trying to connect|Client has encountered a connection error|Client was closed)/;
 
 // Returns a fixed, content-free label for an expected failure, or undefined.
@@ -126,7 +126,10 @@ function refuseExistingTransaction(db: NodePgDatabase): void {
 
 // Adds the load diagnostics to the plan, sorted like the parse errors of the
 // plan. A load error makes the whole batch non applicable.
-function mergeLoadErrors(plan: ImportPlan, loaded: LoadedSources): ImportPlan {
+export function mergeLoadErrors(
+  plan: ImportPlan,
+  loaded: LoadedSources,
+): ImportPlan {
   if (loaded.loadErrors.length === 0) return plan;
   return {
     operations: plan.operations,

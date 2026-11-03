@@ -55,7 +55,7 @@ Page / UI → Service / Use Case → Repository → Drizzle → PostgreSQL
 
 Les médias seront stockés hors PostgreSQL, dans un stockage objet ; la base conserve leurs métadonnées et références.
 
-Le circuit éditorial retenu repose sur des fichiers **Markdown structurés avec frontmatter**, versionnés dans Git, puis un import privé vers PostgreSQL : validation, dry-run, transaction et idempotence. Le contrat, la validation et la résolution des références sont implémentés ; le chargement des sources, le plan d’import et le dry-run en lecture seule (D03-01 à D03-04) sont implémentés, en attente de revue indépendante ; l’import transactionnel reste à réaliser.
+Le circuit éditorial retenu repose sur des fichiers **Markdown structurés avec frontmatter**, versionnés dans Git, puis un import privé vers PostgreSQL : validation, dry-run, transaction et idempotence. Le contrat, la validation et la résolution des références sont implémentés ; le chargement des sources, le plan d’import et le dry-run en lecture seule (D03-01 à D03-04) sont implémentés, en attente de revue indépendante ; l’import transactionnel (D03-06, `runImport`) est implémenté et testé sur PostgreSQL réel, en attente de revue indépendante ; aucun script ni route d’exécution n’existe encore.
 
 ## Stack technique retenue
 
