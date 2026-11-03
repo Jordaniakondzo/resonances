@@ -8,6 +8,13 @@
       "when": 1790469313316,
       "tag": "0000_editorial_core",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793666700045,
+      "tag": "0001_adr_b1_privileged_locking",
+      "breakpoints": true
     }
   ]
 }

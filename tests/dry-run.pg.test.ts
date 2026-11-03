@@ -5,6 +5,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
 import pg from "pg";
+import { provisionB1Roles } from "./support/b1-roles.js";
 import type {
   ConflictOperation,
   ImportOperation,
@@ -68,6 +69,7 @@ function instrument(target: pg.Pool): pg.Pool {
 
 before(async () => {
   await admin.connect();
+  await provisionB1Roles(admin);
   await admin.query('CREATE DATABASE "' + database + '"');
   created = true;
   const url = new URL(connectionString);

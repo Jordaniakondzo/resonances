@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { provisionB1Roles } from "./support/b1-roles.js";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { publications } from "../db/schema.js";
@@ -23,6 +24,7 @@ let created = false;
 
 before(async () => {
   await admin.connect();
+  await provisionB1Roles(admin);
   await admin.query('CREATE DATABASE "' + database + '"');
   created = true;
   const url = new URL(connectionString);

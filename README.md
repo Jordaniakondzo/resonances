@@ -105,7 +105,7 @@ package-lock.json     Versions verrouillées
 
 - **Node.js 24 ou supérieur** et npm ; environnement validé avec Node 24.15.0 et npm 11.12.1.
 - **PostgreSQL 18** pour reproduire les tests, validés sur 18.6.
-- Une instance de test dédiée et un rôle disposant du privilège `CREATEDB`.
+- Une instance de test dédiée et un rôle disposant des privilèges `CREATEDB` et `CREATEROLE` (la migration ADR-B1 dépend de rôles de cluster ; voir [provisionnement ADR-B1](docs/operations/ADR-B1-ROLE-PROVISIONING.md)).
 
 Depuis la racine du projet :
 

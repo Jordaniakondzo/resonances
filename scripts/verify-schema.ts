@@ -22,14 +22,23 @@ const result = spawnSync(
 if (result.status !== 0)
   throw new Error(result.stderr || result.stdout || "Generation failed");
 const generated = readdirSync(out).filter((file) => file.endsWith(".sql"));
-const committed = readdirSync("db/migrations").filter((file) =>
+const allCommitted = readdirSync("db/migrations").filter((file) =>
   file.endsWith(".sql"),
 );
+// Only the generated initial migration is comparable with a fresh generation.
+// Custom SQL migrations (such as the ADR-B1 security migration) are not derived
+// from the Drizzle schema; they are covered by `db:check` (journal) and the
+// PostgreSQL tests. Each one must still be registered in the journal.
+const committed = allCommitted.filter((file) => file.startsWith("0000_"));
 assert.equal(generated.length, 1);
-assert.equal(
-  committed.length,
-  1,
-  "This verifier covers the initial migration only; adapt it when adding migrations.",
+assert.equal(committed.length, 1, "Expected exactly one 0000_* migration.");
+const journal = JSON.parse(
+  readFileSync("db/migrations/meta/_journal.json", "utf8"),
+) as { entries: { tag: string }[] };
+assert.deepEqual(
+  journal.entries.map((entry) => entry.tag + ".sql").sort(),
+  [...allCommitted].sort(),
+  "Every migration file must be registered in the journal, and vice versa.",
 );
 const normalize = (file: string) =>
   readFileSync(file, "utf8").replaceAll("\r\n", "\n").trim();
@@ -38,5 +47,5 @@ assert.equal(
   normalize(path.join("db/migrations", committed[0]!)),
 );
 console.log(
-  "Initial SQL migration matches a fresh generation from the Drizzle schema.",
+  "Initial SQL migration matches a fresh generation from the Drizzle schema; all migrations are in the journal.",
 );
