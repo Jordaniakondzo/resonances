@@ -1,0 +1,19 @@
+.hero {
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--measure-reading);
+}
+
+.title {
+  font-size: var(--text-hero);
+  font-weight: var(--weight-heading-strong);
+}
+
+.lead {
+  font-size: var(--text-body);
+}
+
+.note {
+  color: var(--color-text-secondary);
+  font-size: var(--text-ui);
+}

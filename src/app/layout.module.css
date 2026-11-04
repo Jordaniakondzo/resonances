@@ -1,0 +1,38 @@
+.skipLink {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 10;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-night);
+  color: var(--color-surface);
+  font-size: var(--text-ui);
+  /* Hidden until focused, but never removed from the tab order. */
+  transform: translateY(-200%);
+}
+
+.skipLink:focus {
+  transform: none;
+}
+
+/* Shared horizontal frame so header and page content share one left edge. */
+.container {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding-inline: var(--page-gutter);
+}
+
+.header {
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.siteName {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-heading-strong);
+  font-size: var(--text-h3);
+}
+
+.main {
+  padding-block: var(--space-5) var(--space-6);
+}

@@ -65,7 +65,7 @@ Le circuit éditorial retenu repose sur des fichiers **Markdown structurés avec
 - **Versionnement et collaboration :** Git / GitHub.
 - **Médias :** stockage objet, fournisseur encore à choisir.
 
-L’hébergement et le pipeline média définitif restent ouverts. Actuellement, seuls le socle TypeScript et les outils PostgreSQL/Drizzle sont installés ; l’intégration Next.js/React est à venir.
+L’hébergement et le pipeline média définitif restent ouverts. Le socle TypeScript, les outils PostgreSQL/Drizzle et le socle Web Next.js minimal (T1) sont installés ; aucune page éditoriale ni lecture de données n’existe encore.
 
 ## État actuel
 
@@ -75,10 +75,11 @@ L’hébergement et le pipeline média définitif restent ouverts. Actuellement,
 - ✅ Tests d’intégrité et de visibilité sur PostgreSQL réel.
 - ✅ Contrats Markdown/frontmatter, validation éditoriale et résolution des références.
 - ⬜ Dry-run et import privé transactionnel/idempotent.
-- ⬜ Intégration Next.js et implémentation du design system déjà défini.
+- ✅ Socle Web T1 : Next.js App Router, tokens CSS, polices, page d’accueil provisoire et page 404.
+- ⬜ Composants du design system (navigation, cartes, etc.) et pages de contenu.
 - ⬜ Première tranche verticale complète, de l’import à la lecture publique.
 
-Le [compte rendu du socle](docs/RESONANCES-V1-DATA-CORE.md) documente **18 tests réussis sur PostgreSQL 18.6** lors de sa validation. Aucune page du site n’est encore implémentée. Les migrations sont versionnées dans Git.
+Le [compte rendu du socle](docs/RESONANCES-V1-DATA-CORE.md) documente **18 tests réussis sur PostgreSQL 18.6** lors de sa validation. Seule une page d’accueil provisoire et une page 404 existent. Les migrations sont versionnées dans Git.
 
 ## Structure du dépôt
 
@@ -88,10 +89,15 @@ db/                   Schéma Drizzle, visibilité et migrations SQL
 scripts/              Application et vérification des migrations
 tests/                Tests éditoriaux et intégration PostgreSQL
 src/                  Parsing éditorial et lectures de références
+src/app/              Routes et layouts Next.js (composants serveur)
+src/styles/           Tokens CSS et styles globaux
 content/              Exemples Markdown synthétiques
 sources/              Documents de référence — lecture seule
 AGENTS.md             Consignes de travail sur le projet
 drizzle.config.ts     Configuration Drizzle Kit
+next.config.ts        Configuration Next.js
+tsconfig.json         Contexte TypeScript Node (moteur éditorial, tests, scripts)
+tsconfig.web.json     Contexte TypeScript Web (TSX, types générés par Next.js)
 package.json          Dépendances et commandes disponibles
 package-lock.json     Versions verrouillées
 .env.example          Exemples de variables d’environnement
@@ -112,14 +118,45 @@ Depuis la racine du projet :
 ```sh
 npm ci
 npm run build
-npm run typecheck
+npm run typecheck:all
+npm run build:web
+npm run check:client-bundle
+npm run test:web-boundaries
 npm run format:check
 npm run db:check
 npm run db:verify
 npm run test:editorial
 ```
 
-`build` compile le **socle TypeScript**, pas une application Next.js. Aucune commande de lancement du site n’est encore disponible.
+`build` compile toujours le **socle TypeScript** (moteur éditorial) ; l’application Next.js se construit avec `build:web`.
+
+### Lancer le site (socle Web)
+
+```sh
+npm run dev          # serveur de développement : http://localhost:3000
+npm run build:web    # build de production
+npm run start        # sert le build de production
+```
+
+- Les polices (Inter 400/500, Playfair Display 500/700) sont téléchargées depuis Google Fonts **au build** par `next/font` ; un build hors ligne échoue tant qu’elles ne sont pas disponibles.
+- `typecheck` vérifie le contexte Node (`tsconfig.json`), `typecheck:web` le contexte Web (`tsconfig.web.json`, types générés par `next typegen`) ; `typecheck:all` exécute les deux.
+- Le socle Web ne se connecte pas à PostgreSQL. `APP_DATABASE_URL` est réservée à T2 (lectures publiques) et n’est pas encore lue.
+- Les fichiers de `src/app/` ne doivent pas importer le moteur d’import, les scripts, les migrations ni un pilote PostgreSQL : `test:web-boundaries` (source) et `check:client-bundle` (après `build:web`) le contrôlent.
+
+### Versions retenues (T1)
+
+| Paquet | Version | Remarque |
+|---|---|---|
+| Next.js | 16.4.5 | stable (`latest`), Turbopack |
+| React / React DOM | 19.3.1 | |
+| `@types/react` / `@types/react-dom` | 19.3.0 | |
+| TypeScript | 7.0.2 | inchangé ; un seul compilateur |
+
+Avec TypeScript 7, Next.js 16.4.5 exécute le `tsc` natif du projet pour son contrôle de types (l’API JavaScript de TypeScript n’existe plus) et lit `typescript.tsconfigPath`, ici `tsconfig.web.json`. Les erreurs de types font échouer `next build`. Écarts connus : `next build` complète `tsconfig.web.json` (`allowJs`, `esModuleInterop`) ; `next dev` pourrait modifier `AGENTS.md`, désactivé par `agentRules: false`. ESLint n’est pas installé : dette d’outillage à traiter avant la recette finale.
+
+`format:check` utilise `--end-of-line auto` : il accepte les fins de ligne LF et CRLF (par exemple sous Windows avec `core.autocrlf=true`). `next-env.d.ts` est généré par Next.js et ignoré par Git.
+
+**Limites des contrôles de frontière serveur/client.** `tests/web-boundaries.test.ts` ne couvre que les formes d’imports actuellement analysées, et `scripts/check-client-bundle.ts` ne recherche que des marqueurs déterminés dans les artefacts client. Ces contrôles ne prouvent pas, de façon générale, l’absence de fuite pour tous les imports dynamiques, alias ou noms de secrets. Leur couverture devra être réévaluée lorsque T2 introduira les accès aux données publiques.
 
 Pour les tests, définir `TEST_DATABASE_URL` vers l’instance dédiée. Exemple PowerShell, avec des valeurs à remplacer :
 
