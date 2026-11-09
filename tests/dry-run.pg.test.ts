@@ -5,7 +5,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
 import pg from "pg";
-import { provisionB1Roles } from "./support/b1-roles.js";
+import { provisionB1Roles, migrateWithViewsOwner } from "./support/b1-roles.js";
 import type {
   ConflictOperation,
   ImportOperation,
@@ -76,7 +76,9 @@ before(async () => {
   url.pathname = "/" + database;
   seed = new pg.Client({ connectionString: url.toString() });
   await seed.connect();
-  await migrate(drizzle(seed), { migrationsFolder: "db/migrations" });
+  await migrateWithViewsOwner(admin, [], () =>
+    migrate(drizzle(seed), { migrationsFolder: "db/migrations" }),
+  );
   testUrl = url.toString();
   // idleTimeoutMillis 0: an idle connection is never evicted, so the
   // `idleCount` assertions do not depend on how fast the run is.

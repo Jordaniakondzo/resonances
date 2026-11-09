@@ -140,7 +140,7 @@ npm run start        # sert le build de production
 
 - Les polices (Inter 400/500, Playfair Display 500/700) sont téléchargées depuis Google Fonts **au build** par `next/font` ; un build hors ligne échoue tant qu’elles ne sont pas disponibles.
 - `typecheck` vérifie le contexte Node (`tsconfig.json`), `typecheck:web` le contexte Web (`tsconfig.web.json`, types générés par `next typegen`) ; `typecheck:all` exécute les deux.
-- Le socle Web ne se connecte pas à PostgreSQL. `APP_DATABASE_URL` est réservée à T2 (lectures publiques) et n’est pas encore lue.
+- Le socle Web ne se connecte pas encore à PostgreSQL. T2 fournit la couche de lecture publique (`src/services/public-publications.ts`, `src/repositories/public-*.ts`) qui lit `APP_DATABASE_URL` côté serveur avec le rôle `resonances_app_reader`, qui ne lit que les vues `public_read` ([procédure](docs/operations/PUBLIC-READER-PROVISIONING.md) : rôles avant la migration 0002, vérification après activation de LOGIN) ; aucune page ne l’appelle encore (T4).
 - Les fichiers de `src/app/` ne doivent pas importer le moteur d’import, les scripts, les migrations ni un pilote PostgreSQL : `test:web-boundaries` (source) et `check:client-bundle` (après `build:web`) le contrôlent.
 
 ### Versions retenues (T1)

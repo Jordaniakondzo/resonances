@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { provisionB1Roles } from "./support/b1-roles.js";
+import { provisionB1Roles, migrateWithViewsOwner } from "./support/b1-roles.js";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { publications } from "../db/schema.js";
@@ -32,7 +32,9 @@ before(async () => {
   databaseUrl = url.toString();
   client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
-  await migrate(drizzle(client), { migrationsFolder: "db/migrations" });
+  await migrateWithViewsOwner(admin, [], () =>
+    migrate(drizzle(client), { migrationsFolder: "db/migrations" }),
+  );
 });
 after(async () => {
   await client?.end();

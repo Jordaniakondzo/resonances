@@ -15,6 +15,13 @@
       "when": 1793666700045,
       "tag": "0001_adr_b1_privileged_locking",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794241131165,
+      "tag": "0002_public_read_views",
+      "breakpoints": true
     }
   ]
 }

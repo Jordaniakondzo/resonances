@@ -4,7 +4,11 @@ import { after, before, test } from "node:test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { provisionB1Roles, withRoleLock } from "./support/b1-roles.js";
+import {
+  provisionB1Roles,
+  withRoleLock,
+  migrateWithViewsOwner,
+} from "./support/b1-roles.js";
 import type { ImportWriter } from "../src/editorial/import-writer.js";
 import type { ConflictOperation } from "../src/editorial/operations.js";
 import type { LoadedSources } from "../src/editorial/source-loader.js";
@@ -80,7 +84,9 @@ before(async () => {
   await admin.query(`CREATE DATABASE "${database}" OWNER ${MIGRATOR}`);
   created = true;
   seed = await connectAs(MIGRATOR);
-  await migrate(drizzle(seed), { migrationsFolder: "db/migrations" });
+  await migrateWithViewsOwner(admin, [MIGRATOR], () =>
+    migrate(drizzle(seed), { migrationsFolder: "db/migrations" }),
+  );
   // Importer privileges as the writer policy describes them: reads on every
   // table, writes on the four editorial tables only.
   await seed.query(`

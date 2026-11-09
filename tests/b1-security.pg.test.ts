@@ -7,7 +7,13 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import { runDryRun } from "../src/services/editorial-dry-run.js";
-import { provisionB1Roles, withRoleLock } from "./support/b1-roles.js";
+import {
+  provisionB1Roles,
+  withRoleLock,
+  migrateWithViewsOwner,
+  holdRoleLock,
+  ROLE_LOCK_KEY,
+} from "./support/b1-roles.js";
 import { publicationDoc, ID } from "./support/plan-sources.js";
 
 // ADR-B1 security and locking tests, on a dedicated PostgreSQL instance.
@@ -111,7 +117,9 @@ before(async () => {
   await admin.query(`CREATE DATABASE "${database}" OWNER ${MIGRATOR}`);
   created = true;
   migrator = await connectAs(MIGRATOR);
-  await migrate(drizzle(migrator), { migrationsFolder: "db/migrations" });
+  await migrateWithViewsOwner(admin, [MIGRATOR], () =>
+    migrate(drizzle(migrator), { migrationsFolder: "db/migrations" }),
+  );
 
   // Importer privileges as the writer policy describes them (SQL-WRITER-POLICY
   // §3): reads on every table, writes on the four editorial tables only.
@@ -1252,22 +1260,28 @@ async function preflightFailure(
   client: pg.Client,
   prepare: string[],
 ): Promise<string> {
-  await client.query("BEGIN");
-  try {
-    // These attempts temporarily alter shared roles (always rolled back).
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('b1-roles'))");
-    // The preflight describes the state BEFORE the migration. This database is
-    // already migrated, so (superuser only) drop what the owner owns in it:
-    // schema, functions, default ACLs and grants. Rolled back with the rest.
-    if (client === adminDb) await client.query(`DROP OWNED BY ${OWNER}`);
-    for (const statement of prepare) await client.query(statement);
-    await client.query(preflight);
-    return "preflight passed";
-  } catch (error) {
-    return (error as Error).message;
-  } finally {
-    await client.query("ROLLBACK");
-  }
+  // These attempts temporarily alter shared roles (always rolled back), among
+  // them the pg_authid rows of the owner and the importer that every test
+  // file's provisioning re-asserts. The shared role lock is held by `admin`, in
+  // the lock database: advisory locks are per database, so the lock formerly
+  // taken here, in this file's database, excluded no other file. Taken before
+  // the probe transaction starts (deadlock rule 1 in support/b1-roles.ts).
+  return holdRoleLock(admin, async () => {
+    await client.query("BEGIN");
+    try {
+      // The preflight describes the state BEFORE the migration. This database is
+      // already migrated, so (superuser only) drop what the owner owns in it:
+      // schema, functions, default ACLs and grants. Rolled back with the rest.
+      if (client === adminDb) await client.query(`DROP OWNED BY ${OWNER}`);
+      for (const statement of prepare) await client.query(statement);
+      await client.query(preflight);
+      return "preflight passed";
+    } catch (error) {
+      return (error as Error).message;
+    } finally {
+      await client.query("ROLLBACK");
+    }
+  });
 }
 
 test("preflight refuses a LOGIN owner, a privileged importer, an importer able to reach the owner", async () => {
@@ -1358,7 +1372,7 @@ test("re-applying the migrations is a no-op and keeps exactly the same functions
   const journal = await migrator.query(
     "SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations",
   );
-  assert.equal(journal.rows[0].n, 2);
+  assert.equal(journal.rows[0].n, 3);
 });
 
 // ---------------------------------------------------------------------------
@@ -1377,17 +1391,21 @@ async function blockFailure(
   prepare: string[],
   sqlText: string,
 ): Promise<string> {
-  await client.query("BEGIN");
-  try {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('b1-roles'))");
-    for (const statement of prepare) await client.query(statement);
-    await client.query(sqlText);
-    return "passed";
-  } catch (error) {
-    return (error as Error).message;
-  } finally {
-    await client.query("ROLLBACK");
-  }
+  // Some anomalies are cluster-wide role memberships (GRANT <role> TO <role>):
+  // same shared role lock as preflightFailure, held by `admin` in the lock
+  // database, taken before the probe transaction starts.
+  return holdRoleLock(admin, async () => {
+    await client.query("BEGIN");
+    try {
+      for (const statement of prepare) await client.query(statement);
+      await client.query(sqlText);
+      return "passed";
+    } catch (error) {
+      return (error as Error).message;
+    } finally {
+      await client.query("ROLLBACK");
+    }
+  });
 }
 
 test("root cause: a schema created for the owner inherits the owner's default privileges, and REVOKE FROM PUBLIC does not remove them", async () => {
@@ -1652,4 +1670,123 @@ test("post-conditions refuse a NULL schema ACL and an importer without USAGE, an
   ).rows[0].acl;
   assert.equal(aclAfter, aclBefore);
   assert.equal(await blockFailure(adminDb, [], postconditions), "passed");
+});
+
+// ---------------------------------------------------------------------------
+// Shared role lock of the probes (overlap with another file's provisioning)
+// ---------------------------------------------------------------------------
+
+test("the role probes wait for a concurrent provisioning instead of racing it on the owner's row", async () => {
+  // `provisioner` plays another test file's provisionB1Roles: in the lock
+  // database, it holds the shared role lock and re-asserts the owner's
+  // attributes exactly as db/provisioning/d03-b1-roles.sql does on every run.
+  const provisioner = new pg.Client({ connectionString });
+  const observer = new pg.Client({ connectionString });
+  await provisioner.connect();
+  await observer.connect();
+  opened.push(provisioner, observer);
+  const pidOf = async (client: pg.Client) =>
+    (await client.query("SELECT pg_backend_pid() AS pid")).rows[0]
+      .pid as number;
+  const provisionerPid = await pidOf(provisioner);
+  // Condition polling, never a fixed delay: resolves once `sqlText` is true for `pid`.
+  const waitUntil = async (pid: number, sqlText: string) => {
+    for (let attempt = 0; attempt < 400; attempt++) {
+      if ((await observer.query(sqlText, [pid])).rows[0].ok) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`session ${pid} never reached: ${sqlText}`);
+  };
+  const reassertOwner = `ALTER ROLE ${OWNER}
+    NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`;
+  const startProvisioning = async () => {
+    await provisioner.query("BEGIN");
+    await provisioner.query(`SELECT pg_advisory_xact_lock(${ROLE_LOCK_KEY})`);
+    await provisioner.query(reassertOwner);
+  };
+
+  try {
+    // 1. The race itself, OUTSIDE the protocol (the probes' former situation): a
+    //    probe updating the owner's row waits for the provisioning, then fails
+    //    when the provisioning commits. The provisioner holds the shared lock, so
+    //    no other test file is involved; the probe is rolled back.
+    await startProvisioning();
+    const adminDbPid = await pidOf(adminDb);
+    await adminDb.query("BEGIN");
+    const racing = adminDb.query(`ALTER ROLE ${OWNER} LOGIN`).then(
+      () => "ok",
+      (error: Error) => error.message,
+    );
+    // The probe is blocked by the provisioner's uncommitted row update.
+    await waitUntil(
+      adminDbPid,
+      `SELECT ${provisionerPid} = ANY (pg_blocking_pids($1)) AS ok`,
+    );
+    await provisioner.query("COMMIT");
+    assert.match(await racing, /tuple concurrently updated/);
+    await adminDb.query("ROLLBACK");
+
+    // 2. INSIDE the protocol: the probes wait for the lock (held by `admin`, in
+    //    the lock database) before their transaction starts, then run on a
+    //    stable row and keep their exact diagnostics.
+    const adminPid = await pidOf(admin);
+    const waitingForRoleLock = `SELECT EXISTS (
+        SELECT 1 FROM pg_locks
+        WHERE pid = $1 AND NOT granted AND locktype = 'advisory' AND objsubid = 1
+          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+          AND classid = ((${ROLE_LOCK_KEY}::bigint >> 32) & 4294967295)::oid
+          AND objid = (${ROLE_LOCK_KEY}::bigint & 4294967295)::oid) AS ok`;
+    for (const [probe, expected] of [
+      [
+        () => preflightFailure(adminDb, [`ALTER ROLE ${OWNER} LOGIN`]),
+        /must be NOLOGIN/,
+      ],
+      [
+        () => preflightFailure(adminDb, [`ALTER ROLE ${IMPORTER} SUPERUSER`]),
+        /must not be superuser, CREATEROLE/,
+      ],
+      [
+        () =>
+          blockFailure(
+            adminDb,
+            [`GRANT ${OWNER} TO ${IMPORTER} WITH INHERIT FALSE, SET TRUE`],
+            postconditions,
+          ),
+        /path to the B1 owner/,
+      ],
+    ] as const) {
+      await startProvisioning();
+      const pending = probe();
+      await waitUntil(adminPid, waitingForRoleLock);
+      await provisioner.query("COMMIT");
+      assert.match(await pending, expected);
+    }
+  } finally {
+    // Never leave the shared lock held, whatever failed above.
+    await provisioner.query("ROLLBACK").catch(() => undefined);
+    await adminDb.query("ROLLBACK").catch(() => undefined);
+  }
+
+  // Every probe was rolled back: the shared roles are as provisioned.
+  const roles = await observer.query(
+    `SELECT rolname, rolcanlogin, rolsuper FROM pg_roles
+     WHERE rolname IN ($1, $2) ORDER BY rolname`,
+    [OWNER, IMPORTER],
+  );
+  // resonances_b1_owner sorts before resonances_importer. The importer's LOGIN
+  // belongs to this file's fixtures and is not asserted here.
+  assert.deepEqual(
+    roles.rows.map((r) => [r.rolname, r.rolsuper]),
+    [
+      [OWNER, false],
+      [IMPORTER, false],
+    ],
+  );
+  assert.equal(roles.rows[0].rolcanlogin, false);
+  const ownerMembers = await observer.query(
+    `SELECT count(*)::int AS n FROM pg_auth_members
+     WHERE roleid = $1::regrole AND member = $2::regrole`,
+    [OWNER, IMPORTER],
+  );
+  assert.equal(ownerMembers.rows[0].n, 0);
 });
