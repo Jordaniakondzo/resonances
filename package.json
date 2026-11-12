@@ -21,6 +21,7 @@
     "format:check": "prettier --check --end-of-line auto \"db/*.ts\" \"src/**/*.{ts,tsx,css}\" tests scripts drizzle.config.ts next.config.ts tsconfig.json tsconfig.web.json package.json",
     "db:verify": "tsx scripts/verify-schema.ts",
     "test:editorial": "tsx --test tests/editorial.test.ts",
+    "test:t3-dataset": "tsx --test tests/t3-dataset.pg.test.ts",
     "check:client-bundle": "tsx scripts/check-client-bundle.ts",
     "test:web-boundaries": "tsx --test tests/web-boundaries.test.ts"
   },

@@ -74,7 +74,9 @@ L’hébergement et le pipeline média définitif restent ouverts. Le socle Type
 - ✅ Migration SQL initiale numérotée, journal et snapshot Drizzle.
 - ✅ Tests d’intégrité et de visibilité sur PostgreSQL réel.
 - ✅ Contrats Markdown/frontmatter, validation éditoriale et résolution des références.
-- ⬜ Dry-run et import privé transactionnel/idempotent.
+- ✅ Moteur privé D03 implémenté (D03-01 à D03-06) : chargement des sources, plan d’import, dry-run en lecture seule (`runDryRun`) et import transactionnel/idempotent (`runImport`) ; en attente de revue indépendante ; aucun script ni route d’exécution.
+- ✅ Utilisation de D03 vérifiée **en environnement de test uniquement** : suites PostgreSQL du moteur et jeu de données synthétique T3 (bootstrap Theme/MediaAsset, dry-run, import, NOOP au second import, visibilité) sur base jetable ([compte rendu](docs/RESONANCES-V1-T3-DATASET.md)) ; données de développement, jamais un corpus autorisé.
+- ⬜ Avant toute véritable diffusion publique : point d’entrée d’exécution, vérification des rôles et privilèges réels ([politique des écrivains SQL](docs/operations/SQL-WRITER-POLICY.md)), support privé des fiches, [checklist éditoriale](docs/operations/EDITORIAL-PUBLICATION-CHECKLIST.md) et décision humaine **AUTORISÉ POUR DIFFUSION** avant tout import pouvant rendre un contenu public.
 - ✅ Socle Web T1 : Next.js App Router, tokens CSS, polices, page d’accueil provisoire et page 404.
 - ⬜ Composants du design system (navigation, cartes, etc.) et pages de contenu.
 - ⬜ Première tranche verticale complète, de l’import à la lecture publique.
@@ -88,6 +90,7 @@ docs/                 Spécification, décisions et guides techniques
 db/                   Schéma Drizzle, visibilité et migrations SQL
 scripts/              Application et vérification des migrations
 tests/                Tests éditoriaux et intégration PostgreSQL
+tests/fixtures/       Jeu de données synthétique T3 (références + Markdown)
 src/                  Parsing éditorial et lectures de références
 src/app/              Routes et layouts Next.js (composants serveur)
 src/styles/           Tokens CSS et styles globaux
@@ -185,6 +188,7 @@ Le README présente le projet ; les documents de référence détaillés restent
 - [Décisions techniques L0](docs/RESONANCES-V1-L0-DECISIONS.md) — décisions D01–D06 validées.
 - [Transition vers l’implémentation](docs/RESONANCES-V1-TRANSITION.md) — lots, dépendances et progression.
 - [Premier bloc de données](docs/RESONANCES-V1-DATA-CORE.md) — choix physiques, commandes, résultats des tests et limites connues.
+- [Jeu de données T3](docs/RESONANCES-V1-T3-DATASET.md) — dataset synthétique, bootstrap des références, passage par D03 et commande `npm run test:t3-dataset`.
 
 Les commentaires du code et des scripts sont rédigés en anglais ; la documentation du projet est en français.
 
