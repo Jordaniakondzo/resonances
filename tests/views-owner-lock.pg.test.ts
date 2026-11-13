@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { after, before, test } from "node:test";
+import { after, afterEach, before, test } from "node:test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
@@ -14,6 +14,14 @@ import {
   withRoleLock,
   type ViewsOwnerMember,
 } from "./support/b1-roles.js";
+import {
+  closeEachOnce,
+  reportCleanupFailures,
+  runCleanupSteps,
+  waitForPendingCloses,
+  type CleanupStep,
+  type CloseAttempt,
+} from "./support/connection-cleanup.js";
 
 // C7/C8: the protocol that keeps the temporary membership of the views owner safe
 // when test files migrate, provision and run C4 negative tests in parallel.
@@ -164,11 +172,79 @@ before(async () => {
   await provisionB1Roles(admin, [MIG_A, MIG_B]);
 });
 
+// Every session opened through `open` belongs to the test that opened it: no
+// session is reused by a later test (they share only the `admin` client and the
+// reference database NAME). Close them when the test ends, after its own
+// `finally` blocks have released the role lock. Kept until `after`, they piled
+// up across the file and, with the other files running in parallel, exhausted
+// max_connections (53300).
+//
+// A failed close fails the hook (and so the test). It is not retried: a close
+// whose wait expired stays in `unfinishedCloses` and is awaited again in
+// `after`, whose DROP DATABASE ... WITH (FORCE) also ends any session still
+// connected to a test database (tests/support/connection-cleanup.ts). A
+// session on the `postgres` database has no such server-side fallback.
+const CLEANUP_TIMEOUT_MS = 10_000;
+const unfinishedCloses: CloseAttempt[] = [];
+
+afterEach(async () => {
+  reportCleanupFailures(
+    "the test's sessions",
+    await closeEachOnce(
+      opened,
+      (client) => client.end(),
+      unfinishedCloses,
+      CLEANUP_TIMEOUT_MS,
+    ),
+  );
+});
+
+// Every step runs even if an earlier one failed (each test database is dropped
+// on its own), `admin` is closed last in any case, and every failure is
+// reported.
 after(async () => {
-  for (const client of opened) await client.end().catch(() => undefined);
-  for (const name of databases)
-    await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
-  await admin.end();
+  await runCleanupSteps(
+    [
+      [
+        "remaining sessions",
+        async () =>
+          reportCleanupFailures(
+            "the remaining sessions",
+            await closeEachOnce(
+              opened,
+              (client) => client.end(),
+              unfinishedCloses,
+              CLEANUP_TIMEOUT_MS,
+            ),
+          ),
+      ],
+      [
+        "closes whose wait expired",
+        async () =>
+          reportCleanupFailures(
+            "the closes whose wait expired",
+            await waitForPendingCloses(unfinishedCloses, CLEANUP_TIMEOUT_MS),
+          ),
+      ],
+      ...databases.map((name): CleanupStep => [
+        `test database ${name}`,
+        () => admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`),
+      ]),
+    ],
+    [
+      "admin session",
+      async () =>
+        reportCleanupFailures(
+          "the admin session",
+          await closeEachOnce(
+            [admin],
+            (client) => client.end(),
+            unfinishedCloses,
+            CLEANUP_TIMEOUT_MS,
+          ),
+        ),
+    ],
+  );
 });
 
 test(

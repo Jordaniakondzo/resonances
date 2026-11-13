@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
-import { after, before, test } from "node:test";
+import { after, afterEach, before, test } from "node:test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
@@ -21,6 +21,14 @@ import {
   type ImportExecutionResult,
 } from "../src/services/editorial-import.js";
 import { publicationDoc, reflectionDoc } from "./support/plan-sources.js";
+import {
+  closeEachOnce,
+  reportCleanupFailures,
+  rollbackAndDestroy,
+  runCleanupSteps,
+  waitForPendingCloses,
+  type CloseAttempt,
+} from "./support/connection-cleanup.js";
 
 // Real PostgreSQL, a throw-away database, several independent connections.
 // Roles: `resonances_importer` and `resonances_b1_owner` come from the ADR-B1
@@ -129,11 +137,91 @@ before(async () => {
   );
 });
 
+// The pools created by a test (probePool, the writer pool) belong to that test
+// only: close them when it ends. Kept until `after`, they piled up across the
+// file (one or more pools per test, idleTimeoutMillis 0) and, with the other
+// files running in parallel, exhausted max_connections (53300). The clients in
+// `opened` are shared by every test and stay open until `after`.
+//
+// A failed close fails the hook (and so the test). It is never retried, since
+// Pool.end() may be called only once: a close whose wait expired stays in
+// `unfinishedCloses` and is awaited again in `after`
+// (tests/support/connection-cleanup.ts).
+const CLEANUP_TIMEOUT_MS = 10_000;
+const unfinishedCloses: CloseAttempt[] = [];
+
+afterEach(async () => {
+  reportCleanupFailures(
+    "the test's pools",
+    await closeEachOnce(
+      pools,
+      (pool) => pool.end(),
+      unfinishedCloses,
+      CLEANUP_TIMEOUT_MS,
+    ),
+  );
+});
+
+// Every step runs even if an earlier one failed, `admin` is closed last in any
+// case, and every failure is reported. All the sessions of this file except
+// `admin` are in the test database: if one of them could not be closed (a pool
+// whose Pool.end() never finished keeps a checked-out client), DROP DATABASE
+// ... WITH (FORCE) makes the server end it, which closes its socket. Without
+// FORCE, the DROP would fail after about 5 s and leave both the database and
+// the session, whose open socket keeps the test process alive.
 after(async () => {
-  for (const pool of pools) await pool.end().catch(() => undefined);
-  for (const client of opened) await client.end().catch(() => undefined);
-  if (created) await admin.query(`DROP DATABASE "${database}"`);
-  await admin.end();
+  await runCleanupSteps(
+    [
+      [
+        "remaining pools and sessions",
+        async () => {
+          const failures = [
+            ...(await closeEachOnce(
+              pools,
+              (pool) => pool.end(),
+              unfinishedCloses,
+              CLEANUP_TIMEOUT_MS,
+            )),
+            ...(await closeEachOnce(
+              opened,
+              (client) => client.end(),
+              unfinishedCloses,
+              CLEANUP_TIMEOUT_MS,
+            )),
+          ];
+          reportCleanupFailures("the remaining pools and sessions", failures);
+        },
+      ],
+      [
+        "closes whose wait expired",
+        async () =>
+          reportCleanupFailures(
+            "the closes whose wait expired",
+            await waitForPendingCloses(unfinishedCloses, CLEANUP_TIMEOUT_MS),
+          ),
+      ],
+      [
+        "test database",
+        async () => {
+          if (created)
+            await admin.query(`DROP DATABASE "${database}" WITH (FORCE)`);
+        },
+      ],
+    ],
+    [
+      "admin session",
+      async () =>
+        reportCleanupFailures(
+          "the admin session",
+          await closeEachOnce(
+            [admin],
+            (client) => client.end(),
+            unfinishedCloses,
+            CLEANUP_TIMEOUT_MS,
+          ),
+        ),
+    ],
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -522,6 +610,7 @@ test("published_at keeps its microseconds: UPDATE then NOOP, and a direct writer
   const writerPool = new pg.Pool({ connectionString: loginUrl, max: 1 });
   pools.push(writerPool);
   const client = await writerPool.connect();
+  let bodyFailed = true;
   try {
     await client.query("BEGIN");
     const writer: ImportWriter = importWriter(drizzle(client));
@@ -548,9 +637,10 @@ test("published_at keeps its microseconds: UPDATE then NOOP, and a direct writer
       [snapshot.id],
     );
     assert.equal(rows[0].v, "2026-03-04T05:06:07.654321Z");
+    bodyFailed = false;
   } finally {
-    await client.query("ROLLBACK");
-    client.release(true);
+    // Released even if ROLLBACK fails, without hiding an error of the body.
+    await rollbackAndDestroy(client, bodyFailed, CLEANUP_TIMEOUT_MS);
   }
 });
 
