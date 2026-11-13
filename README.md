@@ -114,7 +114,7 @@ package-lock.json     Versions verrouillées
 
 - **Node.js 24 ou supérieur** et npm ; environnement validé avec Node 24.15.0 et npm 11.12.1.
 - **PostgreSQL 18** pour reproduire les tests, validés sur 18.6.
-- Une instance de test dédiée et un rôle disposant des privilèges `CREATEDB` et `CREATEROLE` (la migration ADR-B1 dépend de rôles de cluster ; voir [provisionnement ADR-B1](docs/operations/ADR-B1-ROLE-PROVISIONING.md)).
+- Pour la suite PostgreSQL complète : une instance de test **exclusivement dédiée** et un rôle **superutilisateur** de test (les sondes du catalogue et le verrou sur `pg_auth_members` l'exigent ; voir [Instance PostgreSQL de test](docs/RESONANCES-V1-DATA-CORE.md#instance-postgresql-de-test)). Ces privilèges concernent l'infrastructure de tests seulement, pas les rôles applicatifs ni la production ([provisionnement ADR-B1](docs/operations/ADR-B1-ROLE-PROVISIONING.md)).
 
 Depuis la racine du projet :
 
@@ -161,12 +161,26 @@ Avec TypeScript 7, Next.js 16.4.5 exécute le `tsc` natif du projet pour son con
 
 **Limites des contrôles de frontière serveur/client.** `tests/web-boundaries.test.ts` ne couvre que les formes d’imports actuellement analysées, et `scripts/check-client-bundle.ts` ne recherche que des marqueurs déterminés dans les artefacts client. Ces contrôles ne prouvent pas, de façon générale, l’absence de fuite pour tous les imports dynamiques, alias ou noms de secrets. Leur couverture devra être réévaluée lorsque T2 introduira les accès aux données publiques.
 
-Pour les tests, définir `TEST_DATABASE_URL` vers l’instance dédiée. Exemple PowerShell, avec des valeurs à remplacer :
+Pour les tests, définir `TEST_DATABASE_URL` vers l’instance dédiée, démarrée explicitement sur `127.0.0.1:55439`. Exemple PowerShell, avec des valeurs à remplacer.
+
+Ces commandes s'exécutent **depuis la racine du dépôt**. `.local\postgres-tests` est un cluster **déjà initialisé et exclusivement dédié aux tests** ; `SUPERUSER_DE_TEST` est un **placeholder à remplacer** par le superutilisateur de ce cluster. Le port **55439** doit toujours être fixé explicitement, et le service PostgreSQL principal du port 5432 ne doit **jamais** être ciblé.
 
 ```powershell
-$env:TEST_DATABASE_URL = 'postgresql://USER:PASSWORD@127.0.0.1:5432/postgres'
+$pgCtl = 'C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe'   # pg_ctl n'est pas dans le PATH ; adapter si l'installation diffère
+if (-not (Test-Path $pgCtl)) { throw "pg_ctl.exe introuvable : $pgCtl" }
+$log = Join-Path $env:TEMP 'resonances-pg-test.log'   # journal hors du dépôt
+& $pgCtl -D .local\postgres-tests -l $log -o "-p 55439 -c listen_addresses=127.0.0.1" -w start
+$env:TEST_DATABASE_URL = 'postgresql://SUPERUSER_DE_TEST@127.0.0.1:55439/postgres'
 npm test
+& $pgCtl -D .local\postgres-tests -m fast -w stop
 ```
+
+- **Cluster dédié obligatoire** : les tests créent et suppriment des bases, modifient des rôles et des mots de passe communs au cluster et terminent des sessions. Ne jamais les lancer contre une instance contenant des données, ni contre le service du port 5432.
+- **Une seule suite à la fois** par instance : deux exécutions simultanées partageraient les mêmes rôles et verrous.
+- **Authentification** : `scram-sha-256` pour `resonances_app_reader` (règles placées avant les règles `trust`), `trust` pour les autres rôles de cette instance locale uniquement.
+- **Deux profils** : `npm test` (parallèle) et `npx tsx --test --test-concurrency=1 tests/*.test.ts` (séquentiel). En parallèle, le test 7 de `views-owner-lock` peut s’ignorer sous contention ; son scénario est alors validé par le profil séquentiel ou par l’exécution isolée de ce fichier.
+
+Détails, limites et derniers résultats : [Instance PostgreSQL de test](docs/RESONANCES-V1-DATA-CORE.md#instance-postgresql-de-test).
 
 Les fichiers `.env` ne sont pas chargés automatiquement. Ne pas versionner les secrets. Les procédures de génération et d’application des migrations sont détaillées dans le [guide du socle](docs/RESONANCES-V1-DATA-CORE.md).
 

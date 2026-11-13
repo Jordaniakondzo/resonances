@@ -96,7 +96,7 @@ ORDER BY p.published_at DESC, p.id DESC;
 
 ## Reproduction
 
-Prérequis vérifiés : Node 24.15.0, npm 11.12.1, PostgreSQL 18 local. Les versions npm exactes sont dans package-lock.json. Utiliser une instance PostgreSQL de test, avec un rôle pouvant créer des bases temporaires.
+Prérequis vérifiés : Node 24.15.0, npm 11.12.1, PostgreSQL 18 local. Les versions npm exactes sont dans package-lock.json. Utiliser une instance PostgreSQL exclusivement dédiée aux tests et un rôle superutilisateur de test (voir « Instance PostgreSQL de test » : le socle seul n'exigeait que la création de bases temporaires, la suite complète actuelle exige un superutilisateur).
 
 ~~~powershell
 npm ci
@@ -105,11 +105,11 @@ npm run typecheck
 npm run format:check
 npm run db:check
 npm run db:verify
-$env:TEST_DATABASE_URL = 'postgresql://USER:PASSWORD@127.0.0.1:PORT/postgres'
+$env:TEST_DATABASE_URL = 'postgresql://SUPERUSER_DE_TEST@127.0.0.1:55439/postgres'
 npm test
 ~~~
 
-Les variables ne sont pas chargées automatiquement depuis .env ; les définir dans l’environnement (ou employer le mécanisme de chargement de Node). Ne pas versionner les secrets. Les tests n’utilisent jamais DATABASE_URL comme fallback : ils créent une base au nom UUID, y appliquent la migration, puis suppriment uniquement cette base. Aucun TRUNCATE/DROP n’est exécuté sur une base fournie par l’utilisateur.
+L’instance attendue est décrite ci-dessous (« Instance PostgreSQL de test »). Les variables ne sont pas chargées automatiquement depuis .env ; les définir dans l’environnement (ou employer le mécanisme de chargement de Node). Ne pas versionner les secrets. Les tests n’utilisent jamais DATABASE_URL comme fallback : ils créent une base au nom UUID, y appliquent la migration, puis suppriment uniquement cette base. Aucun TRUNCATE/DROP n’est exécuté sur une base fournie par l’utilisateur.
 
 Pour appliquer les migrations à une base de développement explicitement choisie :
 
@@ -119,6 +119,71 @@ npm run db:migrate
 ~~~
 
 Cette commande n’a pas été exécutée contre le service PostgreSQL existant de l’utilisateur. Les migrations ont été appliquées par les tests sur des bases isolées. Réappliquer la même migration doit préserver les données.
+
+## Instance PostgreSQL de test
+
+### Une instance dédiée, jamais une instance partagée
+
+Les tests ne se contentent pas de créer des bases temporaires : ils agissent sur des objets **communs à tout le cluster**. Ils créent et modifient des rôles de connexion (`resonances_*_test_*`, `resonances_t2_lock_migrator_*`…) et leurs mots de passe, provisionnent les rôles ADR-B1 et T2 (`resonances_importer`, `resonances_b1_owner`, `resonances_app_reader`, `resonances_public_views_owner`), ajoutent et retirent des appartenances à ces rôles, prennent un verrou consultatif partagé (`hashtext('b1-roles')`), terminent des sessions (`pg_terminate_backend`, `DROP DATABASE … WITH (FORCE)` sur leurs propres bases) et suppriment leurs bases `resonances_test_<uuid>`. Ils exigent donc un cluster PostgreSQL **réservé aux tests**, sans aucune donnée réelle, et un rôle **superutilisateur**.
+
+Trois niveaux de privilèges à ne pas confondre :
+
+- **Infrastructure de tests** : un superutilisateur est nécessaire pour la suite PostgreSQL complète (`tests/support/b1-roles.ts` : sondes directes du catalogue, verrou de `pg_auth_members`, `SET ROLE` sans appartenance). `CREATEDB` et `CREATEROLE` ne suffisent pas. Ce privilège n'existe que dans l'instance de test.
+- **Rôles applicatifs** : privilèges minimaux, déjà provisionnés par `db/provisioning` (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`) ; le lecteur public ne lit que les vues `public_read`.
+- **Production** : aucun superutilisateur applicatif ; les exigences sont celles du [provisionnement ADR-B1](operations/ADR-B1-ROLE-PROVISIONING.md) et du [provisionnement du lecteur public](operations/PUBLIC-READER-PROVISIONING.md). Rien dans ce document ne les modifie.
+
+Limites à connaître :
+
+- les tests ne suppriment que les bases qu’ils ont créées, mais les rôles de test restent définis dans le cluster entre deux exécutions ;
+- une exécution interrompue (processus tué, panne) peut laisser une base `resonances_test_<uuid>` ou une appartenance temporaire au propriétaire des vues ; la reprise se fait à la main, dans ce cluster seulement ([procédure](operations/PUBLIC-READER-PROVISIONING.md)) ;
+- **ne jamais lancer simultanément deux suites** (deux `npm test`, ou deux worktrees) contre la même instance : elles partagent les mêmes rôles, mots de passe et verrous, et se perturberaient mutuellement.
+
+### Démarrage explicite sur 127.0.0.1:55439
+
+L’instance locale de référence est `.local/postgres-tests` (ignorée par Git, PostgreSQL 18.6). Son `postgresql.conf` ne fixe pas de port : sans option, elle tenterait le port 5432 du service PostgreSQL déjà installé. La démarrer et l’arrêter explicitement :
+
+Ces commandes s'exécutent **depuis la racine du dépôt**. `.local\postgres-tests` est un cluster **déjà initialisé et exclusivement dédié aux tests** ; `SUPERUSER_DE_TEST` est un **placeholder à remplacer** par le superutilisateur de ce cluster. Le port **55439** doit toujours être fixé explicitement, et le service PostgreSQL principal du port 5432 ne doit **jamais** être ciblé.
+
+~~~powershell
+$pgCtl = 'C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe'   # pg_ctl n'est pas dans le PATH ; adapter si l'installation diffère
+if (-not (Test-Path $pgCtl)) { throw "pg_ctl.exe introuvable : $pgCtl" }
+$log = Join-Path $env:TEMP 'resonances-pg-test.log'   # journal hors du dépôt
+& $pgCtl -D .local\postgres-tests -l $log -o "-p 55439 -c listen_addresses=127.0.0.1" -w start
+$env:TEST_DATABASE_URL = 'postgresql://SUPERUSER_DE_TEST@127.0.0.1:55439/postgres'
+npm test
+& $pgCtl -D .local\postgres-tests -m fast -w stop
+~~~
+
+Avant de lancer les tests, vérifier qu’on parle bien à cette instance (`SELECT inet_server_port()` et l’identifiant système de `pg_control_system()`). Le service PostgreSQL du port 5432 n’est jamais utilisé par les tests.
+
+### Authentification
+
+`pg_hba.conf` de l’instance de test :
+
+~~~text
+host    all             resonances_app_reader   127.0.0.1/32            scram-sha-256
+host    all             resonances_app_reader   ::1/128                 scram-sha-256
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+(règles de réplication trust inchangées)
+~~~
+
+- Les deux règles SCRAM ciblées doivent **précéder** les règles `trust` : PostgreSQL applique la première règle qui correspond.
+- Le lecteur public `resonances_app_reader` doit ainsi s’authentifier par mot de passe, comme en production : un mauvais mot de passe ou l’absence de mot de passe est refusé. Le test « a database failure surfaces as a generic error without SQL » (`tests/public-read.pg.test.ts`) dépend de ce refus ; il échoue sous `trust`.
+- Les autres rôles restent en `trust` sur cette instance locale uniquement. Les mots de passe sont générés par les tests eux-mêmes ; aucun secret n’est stocké dans le dépôt. Ne jamais reprendre cette configuration `trust` hors de l’instance de test.
+- L’instance n’écoute que sur `127.0.0.1` : la règle `::1` est inactive tant que l’écoute n’est pas étendue.
+
+### Deux profils de validation
+
+| Profil | Commande | Rôle |
+|---|---|---|
+| Parallèle (par défaut) | `npm test` | profil courant ; les fichiers s’exécutent en parallèle |
+| Séquentiel | `npx tsx --test --test-concurrency=1 tests/*.test.ts` | même sélection de fichiers, un fichier à la fois |
+
+Le test 7 de `tests/views-owner-lock.pg.test.ts` (« brutal interruption… ») n’interrompt sa session victime que si son détenteur est le prochain dans la file du verrou de rôle partagé ; sinon il **s’ignore** (`another session was queued for the role lock; not interrupted`) pour ne pas exposer l’appartenance résiduelle à un autre fichier. En profil parallèle, cette condition dépend de l’ordonnancement : le test peut être ignoré. Un test ignoré n’est pas un test exécuté : lorsqu’il est ignoré, valider ce scénario par le profil séquentiel ou par `npx tsx --test tests/views-owner-lock.pg.test.ts`.
+
+Validation du 13 novembre 2026 (`main` @ `c8e9eca`, SCRAM ciblé actif) : profil parallèle 430 réussis, 0 échec, 1 ignoré sur 431, deux fois ; profil séquentiel 430/0/1 ; le seul test ignoré est « symbolic links are refused (file link) » (liens symboliques de fichiers non autorisés sous Windows) ; le test 7 a réellement exécuté son scénario dans chaque exécution. Lors d’une session précédente le même jour, il s’était ignoré dans trois exécutions parallèles sur trois : son exécution en profil parallèle n’est pas garantie. Aucune erreur `53300` ; pic de 28–29 connexions en parallèle, 10 en séquentiel, pour `max_connections = 100`.
 
 ## Vérification du SQL
 
@@ -142,7 +207,7 @@ Relire ce socle physique, puis définir les contrats Markdown/frontmatter et la 
 
 ## Résultats réellement obtenus
 
-Environnement : Node 24.15.0, npm 11.12.1, PostgreSQL **18.6**. Instance séparée liée à 127.0.0.1:55439, créée sous .local/postgres-tests avec un rôle de test et authentification trust uniquement pour cette instance locale. Elle est arrêtée à la fin de la session ; aucune modification du service PostgreSQL existant. Ne jamais utiliser cette configuration trust en production.
+Environnement : Node 24.15.0, npm 11.12.1, PostgreSQL **18.6**. Instance séparée liée à 127.0.0.1:55439, créée sous .local/postgres-tests avec un rôle de test et authentification trust uniquement pour cette instance locale. Elle est arrêtée à la fin de la session ; aucune modification du service PostgreSQL existant. Ne jamais utiliser cette configuration trust en production. (Résultats historiques de la première session ; la configuration actuelle de l’instance, avec SCRAM ciblé pour le lecteur public, est décrite dans « Instance PostgreSQL de test ».)
 
 | Vérification | Résultat |
 |---|---|

@@ -72,10 +72,10 @@ Locale `fr` partout. Tous les documents portent dès leur premier import leur **
 
 ## 5. Commande reproductible
 
-Prérequis : une instance PostgreSQL **dédiée aux tests** (jamais une base existante), un rôle superutilisateur ou doté de `CREATEDB` et `CREATEROLE`, comme pour le reste de la suite. Exemple PowerShell :
+Prérequis : une instance PostgreSQL **dédiée aux tests** (jamais une base existante), un rôle **superutilisateur** de test (`CREATEDB` et `CREATEROLE` ne suffisent pas : bootstrap des références, sondes du catalogue et verrou de `pg_auth_members` l'exigent, comme pour le reste de la suite), démarrée et configurée comme décrit dans [Instance PostgreSQL de test](RESONANCES-V1-DATA-CORE.md#instance-postgresql-de-test) (SCRAM pour le lecteur public, une seule suite à la fois). Exemple PowerShell :
 
 ```powershell
-$env:TEST_DATABASE_URL = 'postgresql://USER:PASSWORD@127.0.0.1:55439/postgres'
+$env:TEST_DATABASE_URL = 'postgresql://SUPERUSER_DE_TEST@127.0.0.1:55439/postgres'
 npm run test:t3-dataset
 ```
 
